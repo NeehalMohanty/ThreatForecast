@@ -552,22 +552,6 @@ Large training datasets are excluded, while saved models allow the prototype to 
 | **Dimpul Pasumarthy** | `2024008609` | **Frontend Architecture** | Contributed to frontend architecture, layout planning, component organization, and dashboard structure. |
 | **Shubham Hakam** | `2024204301` | **Algorithms** | Worked on algorithmic logic supporting attack analysis, attack progression, and system decision-making. |
 
-### Team Lead Contribution
-
-**Neehal Mohanty** coordinated the overall project while taking primary responsibility for the complete frontend implementation and integration.
-
-Responsibilities included:
-
-- Frontend UI/UX
-- React dashboard development
-- Page and component structure
-- SOC-style visual presentation
-- Threat monitoring interface
-- Forecast visualization
-- Risk/confidence presentation
-- Frontend-to-API integration
-- Overall team coordination
-
 ---
 
 ## ⚠️ Prototype Scope
