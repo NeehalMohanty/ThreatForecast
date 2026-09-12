@@ -1,363 +1,54 @@
+import logging
 import pandas as pd
-
 from ml.Forecast_engine import ForecastEngine
-
-
-# =========================================================
-# LOAD CYBERFORECAST ENGINE
-# =========================================================
-
+logger = logging.getLogger(__name__)
 engine = None
 engine_load_error = None
 
-
-try:
-
-    engine = ForecastEngine()
-
-    print(
-        "CyberForecast prediction engine ready."
-    )
-
-except Exception as error:
-
-    engine_load_error = str(error)
-
-    print(
-        "Failed to load CyberForecast engine:"
-    )
-
-    print(error)
-
-
-# =========================================================
-# ENGINE STATUS
-# =========================================================
+def load_engine():
+    global engine, engine_load_error
+    try:
+        engine = ForecastEngine()
+        engine_load_error = None
+    except Exception:
+        engine = None
+        engine_load_error = "Classifier unavailable; check server logs and model directory."
+        logger.exception("Could not load classifier")
 
 def get_engine_status():
+    return {"ready": engine is not None, "status": "ready" if engine else "unavailable",
+            "model_status": "loaded" if engine else "failed", "error": engine_load_error,
+            "forecast_method": "heuristic_transition_rules", "calibrated": False}
 
-    if engine is not None:
+def calculate_risk_score(risk, confidence=0):
+    # Severity index, not a probability of attack.
+    return {"LOW": 20.0, "MEDIUM": 50.0, "HIGH": 75.0, "CRITICAL": 90.0}[risk]
 
-        return {
-            "ready": True,
-            "status": "ready",
-            "model_status": "loaded",
-            "error": None
-        }
-
-
+def get_recommended_action(risk):
     return {
-        "ready": False,
-        "status": "unavailable",
-        "model_status": "failed",
-        "error": engine_load_error
-    }
+        "LOW": "Continue monitoring and validate the telemetry source.",
+        "MEDIUM": "Review authentication and network logs for the affected asset.",
+        "HIGH": "Investigate the affected host and review access, processes and internal connections.",
+        "CRITICAL": "Investigate urgently, preserve logs and consider containment after analyst review.",
+    }[risk]
 
-
-# =========================================================
-# RISK SCORE
-# =========================================================
-
-def calculate_risk_score(
-    risk,
-    confidence
-):
-
-    confidence = float(
-        confidence or 0
-    )
-
-
-    if risk == "CRITICAL":
-        return 90.0
-
-
-    if risk == "HIGH":
-        return 75.0
-
-
-    if risk == "MEDIUM":
-        return 50.0
-
-
-    # LOW risk uses model confidence
-    # instead of a fixed category score.
-
-    return round(
-        confidence,
-        2
-    )
-
-
-# =========================================================
-# RECOMMENDED ACTION
-# =========================================================
-
-def get_recommended_action(
-    risk
-):
-
-    if risk == "CRITICAL":
-
-        return (
-            "Immediately investigate the affected "
-            "host, isolate suspicious systems, "
-            "inspect possible exfiltration activity "
-            "and preserve logs for incident response."
-        )
-
-
-    if risk == "HIGH":
-
-        return (
-            "Investigate the detected activity, "
-            "review affected hosts and monitor "
-            "for further attack progression."
-        )
-
-
-    if risk == "MEDIUM":
-
-        return (
-            "Increase monitoring and inspect "
-            "the detected behavioural indicators "
-            "for suspicious activity."
-        )
-
-
-    return (
-        "Continue normal monitoring. "
-        "No immediate response is required."
-    )
-
-
-# =========================================================
-# PREDICT NETWORK ATTACK
-# =========================================================
-
-def predict_network_attack(
-    data
-):
-
-    # -----------------------------------------------------
-    # ENGINE AVAILABILITY
-    # -----------------------------------------------------
-
+def predict_network_attack(data):
     if engine is None:
-
-        raise RuntimeError(
-            "CyberForecast ML engine is unavailable. "
-            f"{engine_load_error or ''}"
-        )
-
-
-    try:
-
-        # -------------------------------------------------
-        # CONVERT PYDANTIC INPUT TO DICTIONARY
-        # -------------------------------------------------
-
-        telemetry = (
-            data.model_dump()
-            if hasattr(
-                data,
-                "model_dump"
-            )
-            else dict(data)
-        )
-
-
-        # -------------------------------------------------
-        # BUILD DATAFRAME
-        # -------------------------------------------------
-
-        dataframe = pd.DataFrame(
-            [telemetry]
-        )
-
-
-        # -------------------------------------------------
-        # RUN ML + PROGRESSION ENGINE
-        # -------------------------------------------------
-
-        result = engine.forecast(
-            dataframe
-        )
-
-
-        # -------------------------------------------------
-        # CURRENT ATTACK STATUS
-        # -------------------------------------------------
-
-        current_stage = str(
-            result.get(
-                "current_stage",
-                "Benign"
-            )
-        )
-
-
-        current_confidence = float(
-            result.get(
-                "current_confidence",
-                0
-            )
-        )
-
-
-        next_stage = str(
-            result.get(
-                "next_stage",
-                "Benign"
-            )
-        )
-
-
-        next_confidence = float(
-            result.get(
-                "next_confidence",
-                0
-            )
-        )
-
-
-        risk = str(
-            result.get(
-                "risk",
-                "LOW"
-            )
-        ).upper()
-
-
-        evidence = result.get(
-            "evidence",
-            []
-        )
-
-
-        transition_probabilities = (
-            result.get(
-                "transition_probabilities",
-                {}
-            )
-        )
-
-
-        # -------------------------------------------------
-        # NORMALIZE TRANSITION VALUES
-        # -------------------------------------------------
-
-        normalized_probabilities = {}
-
-
-        for (
-            stage,
-            probability
-        ) in transition_probabilities.items():
-
-            normalized_probabilities[
-                str(stage)
-            ] = float(
-                probability
-            )
-
-
-        # -------------------------------------------------
-        # ATTACK BOOLEAN
-        # -------------------------------------------------
-
-        predicted_attack = (
-            current_stage != "Benign"
-        )
-
-
-        predicted_attack_type = (
-            current_stage
-            if predicted_attack
-            else None
-        )
-
-
-        # -------------------------------------------------
-        # RISK SCORE
-        # -------------------------------------------------
-
-        risk_score = (
-            calculate_risk_score(
-                risk,
-                next_confidence
-            )
-        )
-
-
-        # -------------------------------------------------
-        # ACTION
-        # -------------------------------------------------
-
-        recommended_action = (
-            get_recommended_action(
-                risk
-            )
-        )
-
-
-        # -------------------------------------------------
-        # FINAL API RESPONSE
-        # -------------------------------------------------
-
-        return {
-
-            "current_stage":
-                current_stage,
-
-            "current_confidence":
-                current_confidence,
-
-            "next_stage":
-                next_stage,
-
-            "next_confidence":
-                next_confidence,
-
-            "risk":
-                risk,
-
-            "evidence":
-                [
-                    str(item)
-                    for item in evidence
-                ],
-
-            "transition_probabilities":
-                normalized_probabilities,
-
-            "predicted_attack":
-                predicted_attack,
-
-            "predicted_attack_type":
-                predicted_attack_type,
-
-            "risk_score":
-                risk_score,
-
-            "forecast_window":
-                "Next likely attack stage",
-
-            "recommended_action":
-                recommended_action
-        }
-
-
-    except Exception as error:
-
-        print(
-            "Prediction service error:"
-        )
-
-        print(error)
-
-
-        raise RuntimeError(
-            "CyberForecast prediction failed: "
-            f"{error}"
-        )
+        raise RuntimeError(engine_load_error or "Classifier unavailable")
+    telemetry = data.model_dump() if hasattr(data, "model_dump") else dict(data)
+    result = engine.forecast(pd.DataFrame([telemetry]))
+    missing = sorted(set(engine.features) - set(getattr(data, "model_fields_set", telemetry)))
+    return {**result, "predicted_attack": result["current_stage"] != "Benign",
+            "data_quality": {"supplied_features": len(engine.features) - len(missing),
+                             "expected_features": len(engine.features),
+                             "coverage_percent": round(100 * (len(engine.features) - len(missing)) / len(engine.features), 1)},
+            "predicted_attack_type": result["current_stage"] if result["current_stage"] != "Benign" else None,
+            "risk_score": calculate_risk_score(result["risk"]),
+            "forecast_window": "Next observation; elapsed time is not estimated",
+            "recommended_action": get_recommended_action(result["risk"]),
+            "forecast_method": "heuristic_transition_rules", "calibrated": False,
+            "missing_features": missing,
+            "warnings": ([f"{len(missing)} classifier features were omitted and filled with zero."] if missing else []) +
+                        (["The top two next-stage scores are within 10 points; consider both alternatives."] if result['uncertainty']['margin'] < 10 else []) +
+                        (["Classifier confidence is below 60%; review the input before acting."] if result['current_confidence'] < 60 else []) +
+                        ["Stage labels are dataset proxies. Transition scores are uncalibrated rules, not measured future attack probabilities."]}

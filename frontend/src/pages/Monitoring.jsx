@@ -658,7 +658,7 @@ function Monitoring() {
         <div className="chart-header">
 
           <h3>
-            Live Network Activity
+            Simulated Network Activity
           </h3>
 
           <p>
@@ -754,7 +754,7 @@ function Monitoring() {
           <div className="chart-header">
 
             <h3>
-              Live Activity Feed
+              Simulated Activity Feed
             </h3>
 
             <p>

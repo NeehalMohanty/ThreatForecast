@@ -1,18 +1,22 @@
 import { Routes, Route } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
 
 import Layout from './components/Layout'
-import Dashboard from './pages/Dashboard'
-import Threats from './pages/Threats'
-import Monitoring from './pages/Monitoring'
-import Forecast from './pages/Forecast'
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Threats = lazy(() => import('./pages/Threats'))
+const Monitoring = lazy(() => import('./pages/Monitoring'))
+const Forecast = lazy(() => import('./pages/Forecast'))
+const Workspace = lazy(() => import('./pages/Workspace'))
 
 import './App.css'
+import './ui.css'
 
 
 function App() {
   return (
-    <Routes>
+    <Suspense fallback={<p role="status" style={{ padding: 32 }}>Loading workspace…</p>}><Routes>
       <Route element={<Layout />}>
+        <Route path="/workspace" element={<Workspace />} />
         <Route
           path="/"
           element={<Dashboard />}
@@ -33,7 +37,7 @@ function App() {
           element={<Forecast />}
         />
       </Route>
-    </Routes>
+    </Routes></Suspense>
   )
 }
 

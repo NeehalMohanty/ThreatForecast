@@ -354,20 +354,7 @@ class ProgressionModel:
         next_stage = ranked[0][0]
         confidence = ranked[0][1]
 
-        # If current stage itself wins,
-        # look for the strongest different stage.
-        if next_stage == current_stage:
-
-            alternatives = [
-                item
-                for item in ranked
-                if item[0] != current_stage
-            ]
-
-            if alternatives:
-
-                next_stage = alternatives[0][0]
-                confidence = alternatives[0][1]
+        # Persistence is a valid next state, including benign traffic.
 
         return {
             "next_stage": next_stage,
