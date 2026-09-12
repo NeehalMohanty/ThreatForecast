@@ -1,6 +1,6 @@
 from typing import Optional, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, AliasChoices, field_validator, model_validator
 
 
 # =========================================================
@@ -8,6 +8,23 @@ from pydantic import BaseModel
 # =========================================================
 
 class NetworkTrafficInput(BaseModel):
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    @field_validator('*', mode='after')
+    @classmethod
+    def validate_numbers(cls, value, info):
+        if not info.field_name.endswith('_trend') and value < 0:
+            raise ValueError('Telemetry counters and measurements must be non-negative')
+        if abs(value) > 1e15:
+            raise ValueError('Telemetry magnitude exceeds supported range')
+        return value
+
+    @model_validator(mode='after')
+    def require_network_measurement(self):
+        if not self.model_fields_set.intersection({'flow_duration', 'rate', 'tot_size', 'header_length', 'protocol_type'}):
+            raise ValueError('Provide at least one network measurement: flow_duration, rate, tot_size, header_length or protocol_type')
+        return self
 
     # -----------------------------------------------------
     # CICIoT23 network features
@@ -61,7 +78,7 @@ class NetworkTrafficInput(BaseModel):
     tot_size: float = 0
     iat: float = 0
     number: float = 0
-    magnitue: float = 0
+    magnitue: float = Field(default=0, validation_alias=AliasChoices('magnitue', 'magnitude'))
     radius: float = 0
     covariance: float = 0
     variance: float = 0
@@ -83,6 +100,8 @@ class NetworkTrafficInput(BaseModel):
     # -----------------------------------------------------
 
     port_scans_trend: float = 0
+    failed_logins_trend: float = 0
+    process_creation_trend: float = 0
     privilege_changes_trend: float = 0
     internal_connections_trend: float = 0
     outbound_bytes_trend: float = 0
@@ -93,6 +112,15 @@ class NetworkTrafficInput(BaseModel):
 # =========================================================
 
 class PredictionResponse(BaseModel):
+
+    forecast_method: str
+    calibrated: bool
+    missing_features: List[str]
+    warnings: List[str]
+    current_stage_probabilities: dict
+    forecast_basis: str
+    uncertainty: dict
+    data_quality: dict
 
     current_stage: str
 
@@ -126,4 +154,5 @@ class PredictionResponse(BaseModel):
 
 class BatchPredictionInput(BaseModel):
 
-    network_data: List[NetworkTrafficInput]
+    model_config = ConfigDict(extra="forbid")
+    network_data: List[NetworkTrafficInput] = Field(min_length=1, max_length=100)

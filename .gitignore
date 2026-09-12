@@ -48,3 +48,6 @@ data/processed/
 # Optional large captures
 *.pcap
 *.pcapng
+data/runtime/
+.pytest_cache/
+coverage/

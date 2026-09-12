@@ -1,5 +1,8 @@
 import joblib
 import pandas as pd
+import os
+import math
+from pathlib import Path
 
 from .progression_model import ProgressionModel
 
@@ -19,7 +22,7 @@ class ForecastEngine:
         # -------------------------------------------------
 
         self.stage_model = joblib.load(
-            "ml/models/stage_classifier.joblib"
+            Path(os.getenv("THREATFORECAST_MODEL_DIR", str(Path(__file__).resolve().parent / "models"))) / "stage_classifier.joblib"
         )
 
         # -------------------------------------------------
@@ -334,7 +337,7 @@ class ForecastEngine:
         # CRITICAL
         # -------------------------------------------------
 
-        if next_stage == "Exfiltration":
+        if current_stage == "Exfiltration" or next_stage == "Exfiltration":
 
             return "CRITICAL"
 
@@ -379,7 +382,7 @@ class ForecastEngine:
             return "MEDIUM"
 
 
-        if confidence >= 0.60:
+        if current_stage != "Benign" or next_stage != "Benign":
 
             return "MEDIUM"
 
@@ -539,12 +542,10 @@ class ForecastEngine:
         # Current attack stage
         # -------------------------------------------------
 
-        (
-            current_stage,
-            current_confidence
-        ) = self.predict_current_stage(
-            data
-        )
+        raw_scores = self.stage_model.predict_proba(self.prepare_features(data))[0]
+        current_scores = dict(zip(map(str, self.stage_model.classes_), map(float, raw_scores)))
+        current_stage = max(current_scores, key=current_scores.get)
+        current_confidence = current_scores[current_stage]
 
         # -------------------------------------------------
         # Behaviour indicators
@@ -562,8 +563,8 @@ class ForecastEngine:
             next_stage,
             next_confidence,
             probabilities
-        ) = self.predict_next_stage(
-            current_stage,
+        ) = self.predict_weighted_next_stage(
+            current_scores,
             behaviour
         )
 
@@ -591,6 +592,12 @@ class ForecastEngine:
         # -------------------------------------------------
 
         return {
+            "current_stage_probabilities": {stage: round(score * 100, 2) for stage, score in current_scores.items()},
+            "forecast_basis": "Classifier-weighted heuristic transitions",
+            "uncertainty": {
+                "entropy": round(-sum(p * math.log(p) for p in probabilities.values() if p > 0) / math.log(len(probabilities)), 3),
+                "margin": round((sorted(probabilities.values(), reverse=True)[0] - sorted(probabilities.values(), reverse=True)[1]) * 100, 2),
+            },
 
             "current_stage":
                 str(current_stage),
@@ -628,6 +635,21 @@ class ForecastEngine:
                     in probabilities.items()
                 }
         }
+
+    def predict_weighted_next_stage(self, current_scores, behaviour):
+        """Marginalize over classifier states instead of treating its argmax as certain.
+
+        These remain heuristic weights; this does not calibrate the classifier or
+        establish measured forecasting accuracy.
+        """
+        probabilities = {stage: 0.0 for stage in self.progression_model.stages}
+        for current, weight in current_scores.items():
+            forecast = self.progression_model.forecast(current, behaviour)
+            for stage, score in forecast['probabilities'].items():
+                probabilities[stage] += weight * score
+        probabilities = self.progression_model.normalize(probabilities)
+        next_stage = max(probabilities, key=probabilities.get)
+        return next_stage, probabilities[next_stage], probabilities
 
 
 # =========================================================
